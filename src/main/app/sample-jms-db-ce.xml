@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:cluster="http://www.mulesoft.org/schema/mule/ee/cluster" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:mulexml="http://www.mulesoft.org/schema/mule/xml"
+	xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/current/mule-xml.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<flow name="sample-jms-db-ceFlow">
+		<jms:inbound-endpoint queue="${jms.queue.in}"
+			connector-ref="Active_MQ" doc:name="JMS" />
+        <logger message="MessageID=#[message.id]:: Input-Message ID: #[xpath3('/message/id',payload,'STRING')]" level="INFO" doc:name="Logger"/>
+        <set-variable variableName="OriginalPayload" value="#[payload]" doc:name="Variable - Original Payload"/>
+		<flow-ref name="BusinessRuleToGetParamsFromMessage" doc:name="BusinessRuleToGetParamsFromMessage" />
+		<logger
+			message="MessageID=#[message.id]:: Payload:: ID: #[sessionVars.id]:: METADATA: #[sessionVars.metaData]:: TYPE: #[sessionVars.type]"
+			level="DEBUG" doc:name="Logger" />
+        <logger message="MessageID=#[message.id]:: Payload:: ID: #[sessionVars.id]" level="INFO" doc:name="Logger"/>
+        <db:insert config-ref="postgreSQL" doc:name="Database">
+            <db:parameterized-query><![CDATA[Insert into messages_jms values(#[sessionVars.id],#[sessionVars.metaData],#[sessionVars.type]);]]></db:parameterized-query>
+        </db:insert>
+        <catch-exception-strategy doc:name="Catch Exception Strategy">
+            <flow-ref name="handlingError" doc:name="handlingError"/>
+        </catch-exception-strategy>
+	</flow>
+    <sub-flow name="handlingError">
+        <logger message="MessageID=#[message.id]:: #[flowVars.OriginalPayload]" level="ERROR" doc:name="Logger"/>
+        <set-payload value="#[flowVars.OriginalPayload]" doc:name="Set Original Payload"/>
+        <jms:outbound-endpoint queue="ERROR" connector-ref="Active_MQ" doc:name="JMS OUT"/>
+    </sub-flow>
+    <sub-flow name="BusinessRuleToGetParamsFromMessage">
+        <flow-ref name="SchemaFilterValidator" doc:name="SchemaFilterValidator"/>
+        <flow-ref name="GetParamsFromMessage" doc:name="GetParamsFromMessage"/>
+    </sub-flow>
+    <sub-flow name="SchemaFilterValidator">
+        <mulexml:xml-to-dom-transformer doc:name="XML to DOM"/>
+        <message-filter  doc:name="Filter XSD" throwOnUnaccepted="true">
+            <mulexml:schema-validation-filter schemaLocations="schema/jms.xsd" returnResult="true"/>
+        </message-filter>
+    </sub-flow>
+	<sub-flow name="GetParamsFromMessage">
+		<message-properties-transformer scope="session"
+			doc:name="Message Properties">
+			<add-message-property key="id"
+				value="#[xpath3('/message/id',payload,'STRING')]" />
+			<add-message-property key="metaData"
+				value="#[xpath3('/message/metaData',payload,'STRING')]" />
+			<add-message-property key="type"
+				value="#[xpath3('/message/type',payload,'STRING')]" />
+		</message-properties-transformer>
+	</sub-flow>
+</mule>

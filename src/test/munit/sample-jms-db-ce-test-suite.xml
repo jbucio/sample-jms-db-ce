@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:core="http://www.mulesoft.org/schema/mule/core" xmlns:mock="http://www.mulesoft.org/schema/mule/mock" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd">
+    <munit:config name="munit" doc:name="MUnit configuration"/>
+    <spring:beans>
+        <spring:import resource="classpath:sample-jms-db-ce.xml"/>
+        <spring:import resource="classpath:sample-jms-db-ce-configuration.xml"/>
+    </spring:beans>
+    <global-property name="jms.url.host" value="localhost" doc:name="Global Property"/>
+    <global-property name="jms.url.port" value="61616" doc:name="Global Property"/>
+    <global-property name="jms.user" value="admin" doc:name="Global Property"/>
+    <global-property name="jms.password" value="admin" doc:name="Global Property"/>
+    <global-property name="jms.queue.in" value="IN" doc:name="Global Property"/>
+    <global-property name="db.user" value="postgres" doc:name="Global Property"/>
+    <global-property name="db.password" value="postgres" doc:name="Global Property"/>
+    <global-property name="db.url.host" value="localhost" doc:name="Global Property"/>
+    <global-property name="db.url.port" value="5432" doc:name="Global Property"/>
+    <global-property name="db.url.dialect" value="postgres" doc:name="Global Property"/>
+    <global-property name="db.schema" value="jmsMule" doc:name="Global Property"/>
+    <sub-flow name="SetJMS">
+        <munit:set payload="#[getResource('jms-success.txt').asStream()]"  doc:name="Set Message"/>
+        <byte-array-to-string-transformer doc:name="Byte Array to String"/>
+    </sub-flow>
+    <sub-flow name="SetFailJMS">
+        <munit:set payload="#[getResource('jms-fail.txt').asStream()]"  doc:name="Set Message"/>
+        <byte-array-to-string-transformer doc:name="Byte Array to String"/>
+    </sub-flow>
+    <munit:test name="Given_A_Message_Then_The_Process_SchemaFilterValidator_Execute_Success" description="Given_A_Message_Then_The_Process_SchemaFilterValidator_Execute_Success">
+        <flow-ref name="SetJMS" doc:name="SetJMS"/>
+        <flow-ref name="SchemaFilterValidator" doc:name="Flow-ref to SchemaFilterValidator"/>
+        <munit:assert-not-null doc:name="Assert Not Null Payload"/>
+    </munit:test>
+    <munit:test name="Given_A_Message_Then_The_Process_GetParamsFromMessage_Gets_Params" description="Given_A_Message_Then_The_Process_GetParamsFromMessage_Gets_Params">
+        <flow-ref name="SetJMS" doc:name="SetJMS"/>
+        <flow-ref name="GetParamsFromMessage" doc:name="Flow-ref to GetParamsFromMessage"/>
+        <munit:assert-not-null doc:name="Assert Not Null Payload"/>
+        <munit:assert-on-equals expectedValue="#['10']" actualValue="#[sessionVars.id]" doc:name="Assert Equals ID"/>
+        <munit:assert-on-equals expectedValue="#['fkadjkfasdmkdmvkdmkasdawmdcikmwpeicmpwieirejggqer']" actualValue="#[sessionVars.metaData]" doc:name="Assert Equals METADATA"/>
+        <munit:assert-on-equals expectedValue="#['face']" actualValue="#[sessionVars.type]" doc:name="Assert Equals TYPE"/>
+    </munit:test>
+    <munit:test name="sample-jms-db-ce-test-suite-BusinessRuleToGetParamsFromMessageTest" description="Test">
+        <flow-ref name="SetJMS" doc:name="SetJMS"/>
+        <flow-ref name="BusinessRuleToGetParamsFromMessage" doc:name="Flow-ref to BusinessRuleToGetParamsFromMessage"/>
+        <munit:assert-not-null doc:name="Assert Not Null Payload"/>
+        <mock:verify-call messageProcessor="mule:sub-flow" times="1" doc:name="Verify Call - SchemaFilterValidator">
+            <mock:with-attributes>
+                <mock:with-attribute name="name" whereValue="#[matchContains('SchemaFilterValidator')]"/>
+            </mock:with-attributes>
+        </mock:verify-call>
+        <mock:verify-call messageProcessor="mule:sub-flow" doc:name="Verify Call - GetParamsFromMessage">
+            <mock:with-attributes>
+                <mock:with-attribute name="name" whereValue="#[matchContains('GetParamsFromMessage')]"/>
+            </mock:with-attributes>
+        </mock:verify-call>
+    </munit:test>
+    <munit:test name="sample-jms-db-ce-test-suite-sample-jms-db-ceFlowTest" description="Test">
+        <mock:when messageProcessor="jms:inbound-endpoint" doc:name="Mock - JMS">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['JMS']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#['&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot;?&gt;&lt;message&gt;&lt;id&gt;10&lt;/id&gt;&lt;metaData&gt;fkadjkfasdmkdmvkdmkasdawmdcikmwpeicmpwieirejggqer&lt;/metaData&gt;&lt;type&gt;face&lt;/type&gt;&lt;/message&gt;']"/>
+        </mock:when>
+        <mock:when messageProcessor="jms:outbound-endpoint" doc:name="Mock - JMS Out">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['JMS']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#[]"/>
+        </mock:when>
+        <flow-ref name="SetJMS" doc:name="SetJMS"/>
+        <flow-ref name="sample-jms-db-ceFlow" doc:name="Flow-ref to sample-jms-db-ceFlow"/>
+        <mock:verify-call messageProcessor="mule:sub-flow" doc:name="Verify Call - BusinessRuleToGetParamsFromMessage">
+            <mock:with-attributes>
+                <mock:with-attribute name="name" whereValue="#[matchContains('BusinessRuleToGetParamsFromMessage')]"/>
+            </mock:with-attributes>
+        </mock:verify-call>
+    </munit:test>
+    <munit:test name="sample-jms-db-ce-test-suite-sample-jms-db-ceFlowTest1" description="Test" ignore="true">
+        <mock:throw-an exception-ref="#[new java.lang.Exception(&quot;Munit Exception for test&quot;)]" whenCalling="mule.sub-flow" doc:name="Throw an Exception">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['CatchExceptionStrategy']"/>
+            </mock:with-attributes>
+        </mock:throw-an>
+<!--         <mock:when messageProcessor="mule:sub-flow" doc:name="Mock - Flow handlingError"> -->
+<!--             <mock:with-attributes> -->
+<!--                 <mock:with-attribute name="name" whereValue="#[matchContains('handlingError')]"/> -->
+<!--             </mock:with-attributes> -->
+<!--             <mock:then-return payload="#[]"/> -->
+<!--         </mock:when> -->
+        <mock:when messageProcessor="jms:outbound-endpoint" doc:name="Mock - JMS Out">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['JMS OUT']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#[]"/>
+        </mock:when>
+        <flow-ref name="SetFailJMS" doc:name="SetFailJMS"/>
+        <flow-ref name="sample-jms-db-ceFlow" doc:name="Flow-ref to sample-jms-db-ceFlow"/>
+        <mock:verify-call messageProcessor=".*:.*" doc:name="Verify Call">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['Set Original Payload']"/>
+            </mock:with-attributes>
+        </mock:verify-call>
+    </munit:test>
+    <munit:test name="Given_A_Message_Fail_Then_The_Process_SchemaFilterValidator_Throws_A_Filter_Exception" description="Given_A_Message_Fail_Then_The_Process__SchemaFilterValidator_Throws_A_Filter_Exception" expectException="org.mule.api.routing.filter.FilterUnacceptedException">
+        <flow-ref name="SetFailJMS" doc:name="SetFailJMS"/>
+        <flow-ref name="SchemaFilterValidator" doc:name="Flow-ref to SchemaFilterValidator"/>
+    </munit:test>
+</mule>
